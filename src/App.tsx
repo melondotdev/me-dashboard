@@ -232,7 +232,7 @@ function App() {
                   />
                   <YAxis 
                     stroke="#fff" 
-                    tickFormatter={(value) => formatNumber(value)}
+                    tickFormatter={(value) => `${(value / 1e6).toFixed(1)}M`}
                     tick={{ fontSize: 12 }}
                   />
                   <Tooltip
@@ -240,7 +240,13 @@ function App() {
                     labelStyle={{ color: '#fff' }}
                     itemStyle={{ color: '#fff' }}
                   />
-                  <Line type="monotone" dataKey="totalStakingPower" stroke="#f472b6" strokeWidth={2} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="totalStakingPower" 
+                    stroke="#f472b6" 
+                    strokeWidth={2}
+                    dot={false}  // remove dots; or use dot={{ r: 2 }} for smaller ones
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -260,7 +266,7 @@ function App() {
                   />
                   <YAxis 
                     stroke="#fff" 
-                    tickFormatter={(value) => formatNumber(value)}
+                    tickFormatter={(value) => `${(value / 1e6).toFixed(1)}M`}
                     tick={{ fontSize: 12 }}
                   />
                   <Tooltip
@@ -268,7 +274,13 @@ function App() {
                     labelStyle={{ color: '#fff' }}
                     itemStyle={{ color: '#fff' }}
                   />
-                  <Line type="monotone" dataKey="totalMeStaked" stroke="#34d399" strokeWidth={2} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="totalMeStaked" 
+                    stroke="#34d399" 
+                    strokeWidth={2}
+                    dot={false}  // remove dots; or use dot={{ r: 2 }} for smaller ones
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>
