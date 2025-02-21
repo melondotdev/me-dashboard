@@ -138,28 +138,60 @@ function App() {
   const avgDuration =
     data.stakers.reduce((acc, s) => acc + s.duration, 0) / data.stakers.length;
 
-  // 1. Aggregate data by day (daily totals)
+  // 1. Create daily delta changes for each staker
   const dailyAggregation = data.stakers.reduce((acc, staker) => {
-    const day = format(new Date(staker.startTs * 1000), 'yyyy-MM-dd');
-    if (!acc[day]) {
-      acc[day] = { day, totalStakingPower: 0, totalMeStaked: 0 };
+    // Calculate the day keys for start and (if applicable) end
+    const startDay = format(new Date(staker.startTs * 1000), 'yyyy-MM-dd');
+    const endDay = staker.endTs
+      ? format(new Date(staker.endTs * 1000), 'yyyy-MM-dd')
+      : null;
+
+    // Add stake on the start day
+    acc[startDay] = acc[startDay] || { day: startDay, deltaStakingPower: 0, deltaMeStaked: 0 };
+    acc[startDay].deltaStakingPower += staker.uiStakingPower;
+    acc[startDay].deltaMeStaked += staker.uiAmount;
+
+    // If an endTs exists, subtract stake on that day
+    if (endDay) {
+      acc[endDay] = acc[endDay] || { day: endDay, deltaStakingPower: 0, deltaMeStaked: 0 };
+      acc[endDay].deltaStakingPower -= staker.uiStakingPower;
+      acc[endDay].deltaMeStaked -= staker.uiAmount;
     }
-    acc[day].totalStakingPower += staker.uiStakingPower;
-    acc[day].totalMeStaked += staker.uiAmount;
+
     return acc;
-  }, {} as Record<string, { day: string; totalStakingPower: number; totalMeStaked: number }>);
+  }, {} as Record<string, { day: string; deltaStakingPower: number; deltaMeStaked: number }>);
 
-  // 2. Convert aggregated object to sorted array (by day)
-  const dailyData = Object.values(dailyAggregation).sort((a, b) =>
-    a.day.localeCompare(b.day)
-  );
+  // 2. Determine the full date range: from the earliest day in our data to today
+  const today = new Date();
+  const todayStr = format(today, 'yyyy-MM-dd');
+  const allDays: string[] = [];
 
-  // 3. Compute cumulative values
+  // Determine the earliest day from dailyAggregation keys
+  const daysFromData = Object.keys(dailyAggregation);
+  if (daysFromData.length === 0) {
+    throw new Error("No staker data available to determine date range.");
+  }
+  const earliestDayStr = daysFromData.sort()[0];
+  let currentDate = new Date(earliestDayStr);
+
+  // Loop from the earliest day until today's date (inclusive)
+  while (format(currentDate, 'yyyy-MM-dd') <= todayStr) {
+    allDays.push(format(currentDate, 'yyyy-MM-dd'));
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  // 3. Build an array of daily data with delta values, filling missing days with zeros
+  const dailyData = allDays.map(day => {
+    const delta = dailyAggregation[day] || { deltaStakingPower: 0, deltaMeStaked: 0 };
+    return { day, ...delta };
+  });
+
+  // 4. Compute cumulative totals up to today
   let cumulativeStakingPower = 0;
   let cumulativeMeStaked = 0;
   const cumulativeData = dailyData.map(item => {
-    cumulativeStakingPower += item.totalStakingPower;
-    cumulativeMeStaked += item.totalMeStaked;
+    cumulativeStakingPower += item.deltaStakingPower;
+    cumulativeMeStaked += item.deltaMeStaked;
     return {
       day: item.day,
       totalStakingPower: cumulativeStakingPower,
@@ -168,6 +200,7 @@ function App() {
   });
 
   console.log("Cumulative chart data by day:", cumulativeData);
+    
 
   const thresholds = getPercentileThresholds(data.stakers);
 
