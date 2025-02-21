@@ -134,9 +134,22 @@ function App() {
     );
   }
 
-  // Calculate average lock duration (in days)
-  const avgDuration =
-    data.stakers.reduce((acc, s) => acc + s.duration, 0) / data.stakers.length;
+  // Add this near the top of the component where other calculations are done
+  const currentTimestamp = Math.floor(Date.now() / 1000); // Current time in seconds
+
+  // Filter out expired stakers
+  const activeStakers = data.stakers.filter(staker => 
+    !staker.endTs || staker.endTs > currentTimestamp
+  );
+
+  // Update the total stakers count calculation
+  const activeStakersCount = activeStakers.length;
+
+  // Update the average duration calculation to use active stakers
+  const avgDuration = activeStakersCount > 0 
+  ? activeStakers.reduce((acc, s) => acc + s.duration, 0) / activeStakersCount
+  : 0;
+  
 
   // 1. Create daily delta changes for each staker
   const dailyAggregation = data.stakers.reduce((acc, staker) => {
@@ -205,8 +218,7 @@ function App() {
 
   console.log("Cumulative chart data by day:", cumulativeData);
     
-
-  const thresholds = getPercentileThresholds(data.stakers);
+  const thresholds = getPercentileThresholds(activeStakers);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-950 via-purple-900 to-black text-white">
@@ -243,7 +255,7 @@ function App() {
           />
           <StatCard
             title="Total Stakers"
-            value={formatNumber(data.totalLockups)}
+            value={formatNumber(activeStakersCount)}
             icon={Users}
           />
           <StatCard
