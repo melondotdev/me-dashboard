@@ -324,7 +324,7 @@ function App() {
       </main>
 
       <footer className="border-t border-white/10 px-8 py-4 text-center text-sm text-gray-400">
-        &copy; {new Date().getFullYear()} ME Foundation. All rights reserved.
+        &copy; {new Date().getFullYear()} Bork Research Institute. All rights reserved.
       </footer>
     </div>
   );
