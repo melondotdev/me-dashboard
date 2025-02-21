@@ -87,15 +87,26 @@ function App() {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const result = await response.json();
-        console.log('Live data fetched:', result);
-
-        if (result?.result?.data?.json) {
-          setData(result.result.data.json);
-        } else {
-          throw new Error('Invalid data structure');
+        console.log('API Response:', result); // Detailed logging
+        
+        if (!result?.result?.data?.json) {
+          console.error('Invalid API response structure:', result);
+          throw new Error('Invalid data structure received from API');
         }
+
+        const stakerData = result.result.data.json;
+        
+        // Validate required fields
+        if (!stakerData.stakers || !stakerData.totalUIStakingPower || !stakerData.totalUIStaked) {
+          console.error('Missing required fields in data:', stakerData);
+          throw new Error('Missing required fields in API response');
+        }
+
+        setData(stakerData);
       } catch (err) {
-        console.warn('Failed to fetch live data, falling back to mock data:', err);
+        console.error('Data fetching error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch data');
+        console.log('Falling back to mock data');
         setData(mockData);
         setUsingMockData(true);
       } finally {
@@ -123,20 +134,42 @@ function App() {
     );
   }
 
-  const thresholds = getPercentileThresholds(data.stakers);
+  // Calculate average lock duration (in days)
   const avgDuration =
     data.stakers.reduce((acc, s) => acc + s.duration, 0) / data.stakers.length;
 
-  // Calculate power growth data from stakers
-  const powerGrowthData = data.stakers.reduce((acc, staker) => {
-    const month = format(new Date(staker.startTs * 1000), 'yyyy-MM');
-    acc[month] = (acc[month] || 0) + staker.uiStakingPower;
+  // 1. Aggregate data by day (daily totals)
+  const dailyAggregation = data.stakers.reduce((acc, staker) => {
+    const day = format(new Date(staker.startTs * 1000), 'yyyy-MM-dd');
+    if (!acc[day]) {
+      acc[day] = { day, totalStakingPower: 0, totalMeStaked: 0 };
+    }
+    acc[day].totalStakingPower += staker.uiStakingPower;
+    acc[day].totalMeStaked += staker.uiAmount;
     return acc;
-  }, {} as Record<string, number>);
+  }, {} as Record<string, { day: string; totalStakingPower: number; totalMeStaked: number }>);
 
-  const chartData = Object.entries(powerGrowthData)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([timestamp, power]) => ({ timestamp, power }));
+  // 2. Convert aggregated object to sorted array (by day)
+  const dailyData = Object.values(dailyAggregation).sort((a, b) =>
+    a.day.localeCompare(b.day)
+  );
+
+  // 3. Compute cumulative values
+  let cumulativeStakingPower = 0;
+  let cumulativeMeStaked = 0;
+  const cumulativeData = dailyData.map(item => {
+    cumulativeStakingPower += item.totalStakingPower;
+    cumulativeMeStaked += item.totalMeStaked;
+    return {
+      day: item.day,
+      totalStakingPower: cumulativeStakingPower,
+      totalMeStaked: cumulativeMeStaked,
+    };
+  });
+
+  console.log("Cumulative chart data by day:", cumulativeData);
+
+  const thresholds = getPercentileThresholds(data.stakers);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-950 via-purple-900 to-black text-white">
@@ -183,73 +216,101 @@ function App() {
           />
         </section>
 
-        {/* Main Content */}
+        {/* Charts Section */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Chart Card */}
+          {/* Cumulative Total Staking Power Over Time */}
           <div className="bg-white/10 backdrop-blur-sm rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold mb-4">Staking Power Growth</h2>
+            <h2 className="text-xl font-semibold mb-4">Cumulative Total Staking Power Over Time</h2>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
+                <LineChart data={cumulativeData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.2)" />
-                  <XAxis dataKey="timestamp" stroke="#fff" />
-                  <YAxis stroke="#fff" />
+                  <XAxis 
+                    dataKey="day" 
+                    stroke="#fff" 
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis 
+                    stroke="#fff" 
+                    tickFormatter={(value) => formatNumber(value)}
+                    tick={{ fontSize: 12 }}
+                  />
                   <Tooltip
                     contentStyle={{ backgroundColor: 'rgba(0,0,0,0.7)', border: 'none' }}
                     labelStyle={{ color: '#fff' }}
                     itemStyle={{ color: '#fff' }}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="power"
-                    stroke="#f472b6"
-                    strokeWidth={2}
-                  />
+                  <Line type="monotone" dataKey="totalStakingPower" stroke="#f472b6" strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Thresholds Card */}
+          {/* Cumulative Total $ME Staked Over Time */}
           <div className="bg-white/10 backdrop-blur-sm rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold mb-4">Staking Power Thresholds</h2>
-            <div className="space-y-6">
-              {/* Top 1% */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="opacity-80">Top 1% Threshold</span>
-                  <span className="font-semibold">
-                    {formatNumber(thresholds.top1)}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-pink-500 h-2 rounded-full"
-                    style={{ width: '99%' }}
-                  ></div>
-                </div>
+            <h2 className="text-xl font-semibold mb-4">Cumulative Total $ME Staked Over Time</h2>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={cumulativeData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.2)" />
+                  <XAxis 
+                    dataKey="day" 
+                    stroke="#fff" 
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis 
+                    stroke="#fff" 
+                    tickFormatter={(value) => formatNumber(value)}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.7)', border: 'none' }}
+                    labelStyle={{ color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                  />
+                  <Line type="monotone" dataKey="totalMeStaked" stroke="#34d399" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </section>
+
+        {/* Thresholds Card */}
+        <section className="bg-white/10 backdrop-blur-sm rounded-lg shadow-md p-6 mb-8">
+          <h2 className="text-xl font-semibold mb-4">Staking Power Thresholds</h2>
+          <div className="space-y-6">
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="opacity-80">Top 1% Threshold</span>
+                <span className="font-semibold">
+                  {formatNumber(thresholds.top1)}
+                </span>
               </div>
-              {/* Top 10% */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="opacity-80">Top 10% Threshold</span>
-                  <span className="font-semibold">
-                    {formatNumber(thresholds.top10)}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-pink-500 h-2 rounded-full"
-                    style={{ width: '90%' }}
-                  ></div>
-                </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-pink-500 h-2 rounded-full"
+                  style={{ width: '99%' }}
+                ></div>
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="opacity-80">Top 10% Threshold</span>
+                <span className="font-semibold">
+                  {formatNumber(thresholds.top10)}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-pink-500 h-2 rounded-full"
+                  style={{ width: '90%' }}
+                ></div>
               </div>
             </div>
           </div>
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-white/10 px-8 py-4 text-center text-sm text-gray-400">
         &copy; {new Date().getFullYear()} ME Foundation. All rights reserved.
       </footer>
