@@ -172,7 +172,7 @@ function App() {
     throw new Error("No staker data available to determine date range.");
   }
   const earliestDayStr = daysFromData.sort()[0];
-  let currentDate = new Date(earliestDayStr);
+  const currentDate = new Date(earliestDayStr);
 
   // Loop from the earliest day until today's date (inclusive)
   while (format(currentDate, 'yyyy-MM-dd') <= todayStr) {
@@ -183,7 +183,11 @@ function App() {
   // 3. Build an array of daily data with delta values, filling missing days with zeros
   const dailyData = allDays.map(day => {
     const delta = dailyAggregation[day] || { deltaStakingPower: 0, deltaMeStaked: 0 };
-    return { day, ...delta };
+    return {
+      day,
+      deltaStakingPower: delta.deltaStakingPower,
+      deltaMeStaked: delta.deltaMeStaked
+    };
   });
 
   // 4. Compute cumulative totals up to today
